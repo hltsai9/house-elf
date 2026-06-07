@@ -26,11 +26,19 @@ drill in only when something blinks red. Pure Python stdlib, zero installs.
 
 ## Try it
 
+**In your browser** (recommended):
+
 ```bash
-python -m mission_control demo          # synthetic fleet + live dashboard
+python -m mission_control web --demo     # opens http://127.0.0.1:8000
 ```
 
-`Ctrl-C` to exit. The demo runs a simulated 8-agent / 4-team fleet that
+**In the terminal:**
+
+```bash
+python -m mission_control demo           # synthetic fleet + live ASCII dashboard
+```
+
+`Ctrl-C` to exit either one. The demo runs a simulated 8-agent / 4-team fleet that
 exercises every state: a task DAG that unblocks as upstreams finish, a transient
 failure that retries, a hard failure (rate-limit), a hung agent that goes stale,
 and a high burn-rate alert.
@@ -112,11 +120,16 @@ this package.
 ## CLI
 
 ```
-python -m mission_control demo                 # simulate + watch
+python -m mission_control web  [LOG] [--demo --port 8000 --budget N --no-open]
+python -m mission_control demo                 # simulate + watch (terminal)
 python -m mission_control view LOG  [--budget N --interval S --no-color]
 python -m mission_control snapshot LOG         # render one frame and exit (pipe-able)
 python -m mission_control simulate LOG         # only emit synthetic heartbeats
 ```
+
+The web dashboard (`web.py`) reuses the same collector — the browser polls
+`/api/state` (derived `FleetState` as JSON) once a second and draws it. To watch
+real agents: `python -m mission_control web fleet.jsonl`.
 
 ## Tests
 

@@ -42,6 +42,16 @@ def main(argv: list[str] | None = None) -> int:
     sim.add_argument("--ticks", type=int, default=0)
     sim.add_argument("--interval", type=float, default=0.8)
 
+    w = sub.add_parser("web", help="serve the dashboard as a web page")
+    w.add_argument("log", nargs="?", help="heartbeat log to watch (omit with --demo)")
+    w.add_argument("--demo", action="store_true",
+                   help="run the synthetic fleet too (no real agents needed)")
+    w.add_argument("--host", default="127.0.0.1")
+    w.add_argument("--port", type=int, default=8000)
+    w.add_argument("--budget", type=float, default=20.0)
+    w.add_argument("--no-open", action="store_true",
+                   help="don't auto-open a browser")
+
     args = p.parse_args(argv)
     color = None if not getattr(args, "no_color", False) else False
 
@@ -66,6 +76,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "simulate":
         simulator.run(args.log, ticks=args.ticks, interval=args.interval)
+        return 0
+
+    if args.cmd == "web":
+        from . import web
+        log_path = args.log
+        if args.demo or not log_path:
+            log_path = os.path.join(tempfile.mkdtemp(prefix="mc-"), "fleet.jsonl")
+            threading.Thread(
+                target=simulator.run, args=(log_path,),
+                kwargs={"interval": 0.8}, daemon=True).start()
+        web.serve(log_path, host=args.host, port=args.port,
+                  budget_usd=args.budget, open_browser=not args.no_open)
         return 0
 
     return 1

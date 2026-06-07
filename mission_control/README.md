@@ -128,8 +128,11 @@ python -m mission_control simulate LOG         # only emit synthetic heartbeats
 ```
 
 The web dashboard (`web.py`) reuses the same collector — the browser polls
-`/api/state` (derived `FleetState` as JSON) once a second and draws it. To watch
-real agents: `python -m mission_control web fleet.jsonl`.
+`/api/state` (derived `FleetState` as JSON) once a second and draws it. It shows
+an animated **floor** where each agent is an avatar (by role): it wanders while
+`RUNNING`, eases to a *waiting* bench when blocked, shakes while `RETRYING`,
+lines up in the *done* column when finished, and drops to the *failed* strip on
+error. To watch real agents: `python -m mission_control web fleet.jsonl`.
 
 ## Tests
 

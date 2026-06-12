@@ -26,6 +26,9 @@ import sys
 
 from .booker import Booker, DTF_SCOTTSDALE
 from .model import Outcome, ReservationRequest
+from .notify import (
+    NotifyError, NullNotifier, compose_booking, compose_openings, get_notifier,
+)
 from .providers import get_provider
 
 
@@ -41,6 +44,10 @@ def _add_request_args(p: argparse.ArgumentParser, *, need_guest: bool) -> None:
     p.add_argument("--email", default="", help="guest email")
     p.add_argument("--provider", default="mock", choices=["mock", "yelp"],
                    help="booking backend (default: mock, offline)")
+    p.add_argument("--notify", default="none", choices=["none", "console", "email"],
+                   help="notify on a found/booked slot (email needs SMTP_* env)")
+    p.add_argument("--email-to", default="",
+                   help="recipient for --notify email (or set RESERVATIONS_EMAIL_TO)")
 
 
 def _build_request(args) -> ReservationRequest:
@@ -50,6 +57,22 @@ def _build_request(args) -> ReservationRequest:
         name=getattr(args, "name", None) or "Walk-in Guest",
         phone=getattr(args, "phone", None) or "480-000-0000",
         email=getattr(args, "email", ""), notes=args.notes)
+
+
+def _build_notifier(args):
+    return get_notifier(getattr(args, "notify", "none"),
+                        to=getattr(args, "email_to", ""))
+
+
+def _deliver(notifier, subject_body) -> None:
+    """Send a composed (subject, body), turning config errors into a warning."""
+    if isinstance(notifier, NullNotifier):
+        return
+    try:
+        if notifier.send(*subject_body):
+            print(f"  📧 notified: {subject_body[0]}", file=sys.stderr)
+    except NotifyError as e:
+        print(f"  ⚠ notification skipped: {e}", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -70,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--attempts", type=int, default=20)
     w.add_argument("--interval", type=float, default=2.0, help="initial poll seconds")
     w.add_argument("--no-waitlist", action="store_true")
+    w.add_argument("--alert-only", action="store_true",
+                   help="notify when a slot appears but don't book it")
 
     wl = sub.add_parser("waitlist", help="join the remote waitlist directly")
     _add_request_args(wl, need_guest=True)
@@ -84,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     provider = get_provider(args.provider)
+    notifier = _build_notifier(args)
     try:
         req = _build_request(args)
     except ValueError as e:
@@ -101,25 +127,42 @@ def main(argv: list[str] | None = None) -> int:
               f"({provider.name}):")
         for o in offers:
             print(f"    {o.hhmm}  ({o.party_size} seats)")
+        _deliver(notifier, compose_openings(offers, req, DTF_SCOTTSDALE))
         return 0
 
     if args.cmd == "book":
         booking = Booker(provider, fallback_to_waitlist=not args.no_waitlist).book(req)
         print(booking.summary())
+        if booking.ok:
+            _deliver(notifier, compose_booking(booking, req, DTF_SCOTTSDALE))
         return 0 if booking.ok else 1
 
     if args.cmd == "watch":
         def on_poll(i, n, msg):
             print(f"  [{i}/{n}] {msg}", file=sys.stderr)
         booker = Booker(provider, fallback_to_waitlist=not args.no_waitlist)
+        if args.alert_only:
+            offers = booker.alert_when_open(
+                req, attempts=args.attempts, interval_s=args.interval, on_poll=on_poll)
+            if not offers:
+                print(f"○ No slot appeared after {args.attempts} checks ({provider.name}).")
+                return 1
+            print(f"● {len(offers)} slot(s) opened: "
+                  f"{', '.join(o.hhmm for o in offers)} ({provider.name})")
+            _deliver(notifier, compose_openings(offers, req, DTF_SCOTTSDALE))
+            return 0
         booking = booker.watch(req, attempts=args.attempts, interval_s=args.interval,
                                on_poll=on_poll)
         print(booking.summary())
+        if booking.ok:
+            _deliver(notifier, compose_booking(booking, req, DTF_SCOTTSDALE))
         return 0 if booking.ok else 1
 
     if args.cmd == "waitlist":
         booking = provider.join_waitlist(req)
         print(booking.summary())
+        if booking.ok:
+            _deliver(notifier, compose_booking(booking, req, DTF_SCOTTSDALE))
         return 0 if booking.outcome is Outcome.WAITLISTED else 1
 
     return 1

@@ -79,6 +79,32 @@ class Booker:
                                detail=f"waitlist failed: {e}")
         return last
 
+    def alert_when_open(self, req: ReservationRequest, *, attempts: int = 20,
+                        interval_s: float = 2.0, max_interval_s: float = 30.0,
+                        on_poll=None) -> list[Offer]:
+        """Poll for openings and return the first acceptable batch — no booking.
+
+        For "just tell me when a slot exists": the CLI hands these offers to a
+        notifier so the user can grab one themselves. Same backoff as `watch`.
+        """
+        delay = interval_s
+        for i in range(1, attempts + 1):
+            try:
+                offers = self.provider.find_openings(req)
+            except ProviderError as e:
+                if on_poll:
+                    on_poll(i, attempts, f"provider error: {e}")
+                offers = []
+            acceptable = [o for o in offers if req.accepts(o.when.time())]
+            if acceptable:
+                return acceptable
+            if on_poll:
+                on_poll(i, attempts, "no openings yet")
+            if i < attempts:
+                time.sleep(delay)
+                delay = min(delay * 1.5, max_interval_s)
+        return []
+
     def watch(self, req: ReservationRequest, *, attempts: int = 20,
               interval_s: float = 2.0, max_interval_s: float = 30.0,
               on_poll=None) -> Booking:

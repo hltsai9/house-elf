@@ -61,6 +61,42 @@ python -m reservations watch --party 4 --day 2026-07-04 --from 18:00 --to 19:30 
 slot the instant it appears; only if the whole hunt comes up empty does it fall
 back to the waitlist.
 
+## Email me when a slot opens
+
+Any command takes `--notify {none,console,email}`. `console` prints the message
+(handy for dry runs); `email` sends it over SMTP. You get a note when a table is
+**booked/waitlisted** (`book`, `watch`, `waitlist`) or when slots simply **appear**
+(`check`, and `watch --alert-only`).
+
+```bash
+# poll for a midnight drop and EMAIL me the moment a slot appears — don't book it
+export SMTP_HOST=smtp.gmail.com SMTP_USER=you@gmail.com SMTP_PASSWORD=app-password
+python -m reservations watch --party 2 --day 2026-07-04 --from 18:00 --to 20:00 \
+    --name "Ada Lovelace" --phone 480-555-0100 \
+    --attempts 60 --interval 1 --alert-only \
+    --notify email --email-to you@gmail.com
+```
+
+```
+● 2 slot(s) opened: 18:30, 19:00 (mock)
+  📧 notified: 🍜 2 table(s) open at Din Tai Fung — Scottsdale — Sat Jul 04
+```
+
+Drop `--alert-only` to **book and then email the confirmation**. SMTP config comes
+from the environment so secrets stay out of argv:
+
+| env var | meaning | default |
+|---------|---------|---------|
+| `SMTP_HOST` | mail server (required for email) | — |
+| `SMTP_PORT` | port | `587` (`465` with `SMTP_SSL=1`) |
+| `SMTP_USER` / `SMTP_PASSWORD` | auth | — |
+| `SMTP_FROM` | sender | `SMTP_USER` |
+| `SMTP_SSL` / `SMTP_STARTTLS` | transport security | SSL off / STARTTLS on |
+| `RESERVATIONS_EMAIL_TO` | recipient (or pass `--email-to`) | — |
+
+If email isn't configured, the command still runs the booking and prints a clear
+one-line warning instead of failing — so a missing password never costs you a table.
+
 ## Providers — swap the backend, keep the errand
 
 The booker depends only on a `Provider` protocol, the same collector/renderer
@@ -106,7 +142,8 @@ print(booking.outcome)       # Outcome.CONFIRMED | WAITLISTED | UNAVAILABLE | FA
 |---------------|------|
 | `model.py`    | `ReservationRequest`, `Offer`, `Booking`, `Outcome`, parsing/validation |
 | `providers.py`| `Provider` protocol, `MockProvider`, `YelpProvider`, `get_provider` |
-| `booker.py`   | orchestration: `pick_best`, `book`, `watch`; DTF Scottsdale facts |
+| `notify.py`   | `Notifier` protocol, `EmailNotifier`/`ConsoleNotifier`, message composition |
+| `booker.py`   | orchestration: `pick_best`, `book`, `watch`, `alert_when_open`; DTF facts |
 | `__main__.py` | the CLI |
 
 ## Tests

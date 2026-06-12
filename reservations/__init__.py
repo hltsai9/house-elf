@@ -24,6 +24,10 @@ from .providers import (
     DTF_SCOTTSDALE_YELP_SLUG, MockProvider, Provider, ProviderError,
     YelpProvider, get_provider,
 )
+from .notify import (
+    ConsoleNotifier, EmailNotifier, Notifier, NotifyError, NullNotifier,
+    compose_booking, compose_openings, get_notifier,
+)
 
 __all__ = [
     "Booker", "DTF_SCOTTSDALE", "pick_best",
@@ -31,4 +35,6 @@ __all__ = [
     "parse_date", "parse_time",
     "DTF_SCOTTSDALE_YELP_SLUG", "MockProvider", "Provider", "ProviderError",
     "YelpProvider", "get_provider",
+    "ConsoleNotifier", "EmailNotifier", "Notifier", "NotifyError", "NullNotifier",
+    "compose_booking", "compose_openings", "get_notifier",
 ]
